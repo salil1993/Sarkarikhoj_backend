@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Scheme {
+  id                 Int      @id @default(autoincrement())
+  scheme_name        String   @map("scheme_name") @db.VarChar(512)
+  slug               String   @unique @db.VarChar(255)
+  description        String   @db.Text
+  min_age            Int?
+  max_age            Int?
+  income_limit       Int?     @map("income_limit")
+  gender             String?  @db.VarChar(32)
+  occupation         String?  @db.VarChar(128)
+  state              String?  @db.VarChar(128)
+  benefit            String   @db.Text
+  documents_required String   @map("documents_required") @db.Text
+  apply_link         String   @map("apply_link") @db.VarChar(2048)
+  created_at         DateTime @default(now()) @map("created_at")
+  updated_at         DateTime @updatedAt @map("updated_at")
+
+  @@map("schemes")
+}
