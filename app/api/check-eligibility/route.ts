@@ -15,6 +15,10 @@ import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
 import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import {
+  normalizeScoredResultsForClient,
+  toIsoDateString,
+} from "@/utils/eligibilityResponseNormalize";
+import {
   formatValidationErrorDetails,
   logValidationFailure,
   parseCheckEligibilityFull,
@@ -105,6 +109,8 @@ export async function POST(request: Request) {
       results = scoreSchemes(schemes, options.criteria, userTags, options.mode, options.limit);
     }
 
+    results = normalizeScoredResultsForClient(results);
+
     const ids = results.map((r) => r.schemeId);
     const schemeRows =
       ids.length === 0
@@ -120,7 +126,7 @@ export async function POST(request: Request) {
       title: s.scheme_name,
       slug: s.slug,
       official_url: s.apply_link,
-      last_updated: s.updated_at.toISOString(),
+      last_updated: toIsoDateString(s.updated_at),
     }));
 
     void recordAnalyticsEvent("eligibility_check", {
