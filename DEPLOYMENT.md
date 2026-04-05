@@ -106,15 +106,37 @@ Create a free [Upstash Redis](https://upstash.com/) database, copy the REST URL 
 
 ### CORS
 
-By default, API responses do **not** send `Access-Control-Allow-Origin`. Set `CORS_ORIGINS` to a comma-separated allowlist so browser-based frontends on other origins can call the API. `OPTIONS` is implemented on the API routes for preflight.
+By default, API responses do **not** send `Access-Control-Allow-Origin`. Set `CORS_ORIGIN` (or `CORS_ORIGINS`) to a comma-separated allowlist so browser-based frontends on other origins can call the API. `OPTIONS` is implemented on the API routes for preflight.
 
 ## API summary
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/check-eligibility` | Body: `age`, `gender`, `state`, `income`, `occupation`, optional `category`. Returns eligible schemes. |
+| `GET` | `/api/health` | Liveness; `{ ok, db }` |
+| `POST` | `/api/check-eligibility` | JSON body (see below). Returns eligible schemes. |
 | `GET` | `/api/schemes` | All schemes |
 | `GET` | `/api/scheme/[slug]` | One scheme by `slug` |
+
+### `POST /api/check-eligibility` — request body
+
+**Headers:** `Content-Type: application/json`
+
+You may send fields at the top level, or nest them under `data` (top-level keys override nested ones).
+
+**Canonical fields (all required except `category`):**
+
+| Field | Type | Notes |
+|-------|------|--------|
+| `age` | number | Integer 0–120; string numbers like `"25"` are coerced |
+| `gender` | string | Trimmed; casing ignored (`Male` / `male` OK) |
+| `state` | string | State/UT name; trimmed; compared lowercased to schemes |
+| `income` | number | Non-negative annual income in ₹; `0` allowed; strings coerced |
+| `occupation` | string | Trimmed; casing ignored for storage/matching |
+| `category` | string (optional) | e.g. General; empty/null omitted |
+
+**Accepted aliases** (mapped before validation): `annualIncome`, `annual_income`, `stateUT`, `state_ut`, `sex` → `gender`, `job` / `profession` → `occupation`, etc.
+
+**Validation error response (HTTP 400):** `error.code` is `VALIDATION_ERROR`; `error.details` includes `fieldErrors`, `formErrors`, and `issues` (path + message + code per item).
 
 Security features: Zod validation, string sanitization, structured errors, security headers on `/api/*`, and rate limiting (Upstash recommended in production).
 

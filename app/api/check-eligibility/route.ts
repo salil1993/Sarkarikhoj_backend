@@ -3,7 +3,11 @@ import { queryEligibleSchemes } from "@/services/eligibilityEngine";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
 import { handleRouteError, jsonError } from "@/utils/errors";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
-import { parseEligibilityBody } from "@/utils/validation";
+import {
+  formatValidationErrorDetails,
+  logValidationFailure,
+  parseEligibilityBody,
+} from "@/utils/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -41,19 +45,23 @@ export async function POST(request: Request) {
       body = await request.json();
     } catch {
       return NextResponse.json(
-        { ok: false, error: { code: "INVALID_JSON", message: "Request body must be JSON" } },
+        {
+          ok: false,
+          error: {
+            code: "INVALID_JSON",
+            message: "Request body must be valid JSON with Content-Type: application/json.",
+            details: { hint: "Send a JSON object; see API docs for required fields." },
+          },
+        },
         { status: 400, headers: mergeHeaders(undefined, cors) },
       );
     }
 
     const parsed = parseEligibilityBody(body);
     if (!parsed.success) {
-      const res = jsonError(
-        400,
-        "VALIDATION_ERROR",
-        "Invalid eligibility payload",
-        parsed.error.flatten(),
-      );
+      logValidationFailure("check-eligibility", parsed.error);
+      const details = formatValidationErrorDetails(parsed.error);
+      const res = jsonError(400, "VALIDATION_ERROR", details.message, details);
       return new NextResponse(res.body, {
         status: res.status,
         headers: mergeHeaders(res.headers, cors),
