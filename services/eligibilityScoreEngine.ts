@@ -1,16 +1,43 @@
-import type { EligibilityRule, Scheme, SchemeOnTag, Tag } from "@prisma/client";
+import { Prisma, type Scheme } from "@prisma/client";
 import { prisma } from "@/db/client";
 import { cacheGetJson, cacheSetJson } from "@/utils/cache";
 import type { NormalizedEligibilityInput } from "@/types/eligibility";
 import type { ScoredSchemeResult } from "@/types/platform";
 import { isSchemeEligible } from "@/services/eligibilityEngine";
 
-const CACHE_KEY = "platform:schemes:scoring:v1";
+/** Bump when cache shape changes (avoids stale/corrupt Redis breaking scoring). */
+const CACHE_KEY = "platform:schemes:scoring:v2";
 const CACHE_TTL = 120;
 
+/**
+ * Shape returned by `findMany` with tags + rules (matches Prisma schema; explicit so editors
+ * that mis-resolve `@prisma/client` still type-check).
+ */
 export type SchemeWithScoreDeps = Scheme & {
-  tags: (SchemeOnTag & { tag: Tag })[];
-  eligibilityRules: EligibilityRule[];
+  tags: Array<{
+    schemeId: number;
+    tagId: number;
+    tag: { id: number; slug: string; label: string };
+  }>;
+  eligibilityRules: Array<{
+    id: number;
+    schemeId: number;
+    criterion: string;
+    operator: string;
+    value: string;
+    weight: number;
+  }>;
+};
+
+type EligibilityRuleRow = SchemeWithScoreDeps["eligibilityRules"][number];
+type SchemeTagRow = SchemeWithScoreDeps["tags"][number];
+
+const scoringFindManyArgs = {
+  include: {
+    tags: { include: { tag: true } },
+    eligibilityRules: true,
+  },
+  orderBy: { id: "asc" as const },
 };
 
 function fieldWildcardMatch(
@@ -41,7 +68,7 @@ function parseRuleValue(raw: string): unknown {
 }
 
 function evaluateDbRule(
-  rule: EligibilityRule,
+  rule: EligibilityRuleRow,
   criteria: NormalizedEligibilityInput,
   userTags: Set<string>,
 ): { earned: number; matched?: string; missed?: string } {
@@ -159,7 +186,9 @@ function scoreFromLegacy(
   const st = fieldWildcardMatch(scheme.state, criteria.state);
   add(st.ok, st.label, st.label);
 
-  const schemeTagSlugs = new Set(scheme.tags.map((x) => x.tag.slug));
+  const schemeTagSlugs = new Set<string>(
+    scheme.tags.map((x: SchemeTagRow) => x.tag.slug),
+  );
   if (schemeTagSlugs.size > 0) {
     max += 1;
     const overlap = [...schemeTagSlugs].some((t) => userTags.has(t));
@@ -192,20 +221,115 @@ export function inferUserTags(
   return s;
 }
 
+function schemesAsLegacyOnly(rows: Scheme[]): SchemeWithScoreDeps[] {
+  return rows.map((s) => ({
+    ...s,
+    tags: [],
+    eligibilityRules: [],
+  })) as SchemeWithScoreDeps[];
+}
+
+function isDbConnectionError(e: unknown): boolean {
+  if (e instanceof Prisma.PrismaClientInitializationError) return true;
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    return e.code === "P1001" || e.code === "P1002" || e.code === "P1017";
+  }
+  return false;
+}
+
+function isLikelyMissingPlatformSchemaError(e: unknown): boolean {
+  if (e instanceof Prisma.PrismaClientKnownRequestError) {
+    return (
+      e.code === "P2021" ||
+      e.code === "P2022" ||
+      e.code === "P2010" ||
+      e.code === "P2023"
+    );
+  }
+  if (e instanceof Prisma.PrismaClientUnknownRequestError) {
+    const m = e.message.toLowerCase();
+    return (
+      m.includes("doesn't exist") ||
+      m.includes("does not exist") ||
+      m.includes("er_no_such_table") ||
+      m.includes("er_bad_field_error") ||
+      m.includes("1146") ||
+      m.includes("1054")
+    );
+  }
+  return false;
+}
+
+function isValidScoringCache(data: unknown): data is SchemeWithScoreDeps[] {
+  if (!Array.isArray(data) || data.length === 0) return false;
+  for (const row of data) {
+    if (row === null || typeof row !== "object") return false;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "number") return false;
+    if (!Array.isArray(r.tags) || !Array.isArray(r.eligibilityRules)) return false;
+  }
+  return true;
+}
+
+/**
+ * Loads schemes for scoring. Uses tags + eligibility_rules when present.
+ * If platform migrations are missing on the DB (common when only `schemes` exists),
+ * falls back to legacy columns only so `/api/check-eligibility` still works.
+ */
+async function loadSchemesLegacyFromDb(): Promise<SchemeWithScoreDeps[]> {
+  const rows = await prisma.scheme.findMany({ orderBy: { id: "asc" } });
+  return schemesAsLegacyOnly(rows);
+}
+
 export async function loadSchemesForScoring(): Promise<SchemeWithScoreDeps[]> {
-  const cached = await cacheGetJson<SchemeWithScoreDeps[]>(CACHE_KEY);
-  if (cached) return cached;
+  let cached: unknown = null;
+  try {
+    cached = await cacheGetJson(CACHE_KEY);
+  } catch {
+    cached = null;
+  }
+  if (isValidScoringCache(cached)) return cached;
 
-  const rows = await prisma.scheme.findMany({
-    include: {
-      tags: { include: { tag: true } },
-      eligibilityRules: true,
-    },
-    orderBy: { id: "asc" },
-  });
+  try {
+    const rows = (await prisma.scheme.findMany(
+      scoringFindManyArgs as unknown as Parameters<typeof prisma.scheme.findMany>[0],
+    )) as SchemeWithScoreDeps[];
+    try {
+      await cacheSetJson(CACHE_KEY, rows, CACHE_TTL);
+    } catch {
+      /* cache optional */
+    }
+    return rows;
+  } catch (e) {
+    if (isDbConnectionError(e)) throw e;
 
-  await cacheSetJson(CACHE_KEY, rows, CACHE_TTL);
-  return rows;
+    const useLegacy =
+      isLikelyMissingPlatformSchemaError(e) ||
+      e instanceof Prisma.PrismaClientValidationError;
+    if (!useLegacy) {
+      console.error("[eligibility] full scheme load failed", {
+        name: e instanceof Error ? e.name : "unknown",
+        code: e instanceof Prisma.PrismaClientKnownRequestError ? e.code : undefined,
+      });
+    }
+
+    try {
+      const legacy = await loadSchemesLegacyFromDb();
+      console.warn("[eligibility] using legacy scheme load (relations unavailable or cache skipped)", {
+        reason: useLegacy ? "schema_or_validation" : "unknown_prisma_error",
+        prismaCode:
+          e instanceof Prisma.PrismaClientKnownRequestError ? e.code : undefined,
+      });
+      try {
+        await cacheSetJson(CACHE_KEY, legacy, CACHE_TTL);
+      } catch {
+        /* cache optional */
+      }
+      return legacy;
+    } catch {
+      throw e;
+    }
+  }
 }
 
 export function scoreSchemes(
