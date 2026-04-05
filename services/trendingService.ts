@@ -36,6 +36,7 @@ export async function computeTrendingSchemes(
 
   if (raw.length === 0) {
     const fallback = await prisma.scheme.findMany({
+      where: { publishStatus: "published" },
       take,
       orderBy: { updated_at: "desc" },
       select: { id: true, slug: true, scheme_name: true, apply_link: true, updated_at: true },
@@ -53,7 +54,7 @@ export async function computeTrendingSchemes(
 
   const ids = raw.map((r) => r.scheme_id);
   const schemes = await prisma.scheme.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: ids }, publishStatus: "published" },
     select: { id: true, slug: true, scheme_name: true, apply_link: true, updated_at: true },
   });
   const byId = new Map(schemes.map((s) => [s.id, s]));

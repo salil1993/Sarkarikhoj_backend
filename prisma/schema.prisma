@@ -12,6 +12,7 @@ model Scheme {
   scheme_name             String   @map("scheme_name") @db.VarChar(512)
   slug                    String   @unique @db.VarChar(255)
   description             String   @db.Text
+  shortSummary            String?  @map("short_summary") @db.Text
   min_age                 Int?
   max_age                 Int?
   income_limit            Int?     @map("income_limit")
@@ -20,6 +21,7 @@ model Scheme {
   state                   String?  @db.VarChar(128)
   district                String?  @db.VarChar(128)
   category                String?  @db.VarChar(64)
+  categoryId              Int?     @map("category_id")
   benefit                 String   @db.Text
   documents_required      String   @map("documents_required") @db.Text
   apply_link              String   @map("apply_link") @db.VarChar(2048)
@@ -27,20 +29,48 @@ model Scheme {
   ai_description          String?  @map("ai_description") @db.Text
   ai_benefits_summary     String?  @map("ai_benefits_summary") @db.Text
   ai_faqs                 Json?    @map("ai_faqs")
+  publishStatus           String   @default("published") @map("publish_status") @db.VarChar(32)
+  lastVerifiedAt          DateTime? @map("last_verified_at")
+  featuredImageUrl        String?  @map("featured_image_url") @db.VarChar(2048)
+  adminNotes              String?  @map("admin_notes") @db.Text
+  complianceNotes         String?  @map("compliance_notes") @db.Text
   created_at              DateTime @default(now()) @map("created_at")
   updated_at              DateTime @updatedAt @map("updated_at")
 
-  tags             SchemeOnTag[]
-  eligibilityRules EligibilityRule[]
-  benefitRows      SchemeBenefit[]
-  documentRows     DocumentRequirement[]
-  engagements      SchemeEngagement[]
-  faqs             SchemeFaq[]
-  savedBy          SavedScheme[]
+  categoryRef          SchemeCategory?           @relation(fields: [categoryId], references: [id])
+  tags                 SchemeOnTag[]
+  eligibilityRules     EligibilityRule[]
+  benefitRows          SchemeBenefit[]
+  documentRows         DocumentRequirement[]
+  engagements          SchemeEngagement[]
+  faqs                 SchemeFaq[]
+  savedBy              SavedScheme[]
+  featuredCollectionItems FeaturedCollectionItem[]
 
   @@index([state, district])
   @@index([category])
+  @@index([categoryId])
   @@map("schemes")
+}
+
+model SchemeCategory {
+  id     Int     @id @default(autoincrement())
+  slug   String  @unique @db.VarChar(64)
+  label  String  @db.VarChar(128)
+  sort   Int     @default(0)
+  schemes Scheme[]
+
+  @@map("scheme_categories")
+}
+
+model BlogCategory {
+  id    Int           @id @default(autoincrement())
+  slug  String        @unique @db.VarChar(64)
+  label String        @db.VarChar(128)
+  sort  Int           @default(0)
+  posts SeoBlogPost[]
+
+  @@map("blog_categories")
 }
 
 model Tag {
@@ -187,31 +217,114 @@ model SchemeFaq {
 }
 
 model SeoBlogPost {
-  id            Int      @id @default(autoincrement())
-  slug          String   @unique @db.VarChar(255)
-  title         String   @db.VarChar(512)
-  excerpt       String?  @db.Text
-  body          String   @db.Text
-  faqs          Json?
-  focusKeyword  String?  @map("focus_keyword") @db.VarChar(128)
-  published     Boolean  @default(false)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  id                 Int           @id @default(autoincrement())
+  slug               String        @unique @db.VarChar(255)
+  title              String        @db.VarChar(512)
+  excerpt            String?       @db.Text
+  body               String        @db.Text
+  faqs               Json?
+  focusKeyword       String?       @map("focus_keyword") @db.VarChar(128)
+  categoryId         Int?          @map("category_id")
+  metaTitle          String?       @map("meta_title") @db.VarChar(512)
+  metaDescription    String?       @map("meta_description") @db.Text
+  ogImageUrl         String?       @map("og_image_url") @db.VarChar(2048)
+  readingTimeMinutes Int?          @map("reading_time_minutes")
+  authorName         String?       @map("author_name") @db.VarChar(256)
+  canonicalUrl       String?       @map("canonical_url") @db.VarChar(2048)
+  robots             String?       @default("index,follow") @db.VarChar(32)
+  published          Boolean       @default(false)
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
 
+  blogCategory BlogCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
   @@map("seo_blog_posts")
 }
 
 model SeoPage {
-  id          Int      @id @default(autoincrement())
-  type        String   @db.VarChar(32)
-  slug        String   @unique @db.VarChar(255)
-  title       String   @db.VarChar(512)
-  description String?  @db.Text
-  payload     Json
-  published   Boolean  @default(false)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                   Int      @id @default(autoincrement())
+  type                 String   @db.VarChar(32)
+  slug                 String   @unique @db.VarChar(255)
+  title                String   @db.VarChar(512)
+  description          String?  @db.Text
+  metaTitle            String?  @map("meta_title") @db.VarChar(512)
+  metaDescription      String?  @map("meta_description") @db.Text
+  canonicalUrl         String?  @map("canonical_url") @db.VarChar(2048)
+  robots               String?  @default("index,follow") @db.VarChar(32)
+  faqJson              Json?    @map("faq_json")
+  structuredDataJson   Json?    @map("structured_data_json")
+  payload              Json
+  published            Boolean  @default(false)
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   @@index([type])
   @@map("seo_pages")
+}
+
+model AdminUser {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique @db.VarChar(255)
+  passwordHash String     @map("password_hash") @db.VarChar(255)
+  role         String     @default("SUPPORT") @db.VarChar(32)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  auditLogs    AuditLog[]
+
+  @@map("admin_users")
+}
+
+model AuditLog {
+  id          Int        @id @default(autoincrement())
+  adminUserId Int?       @map("admin_user_id")
+  actor       String     @db.VarChar(32)
+  action      String     @db.VarChar(128)
+  resource    String     @db.VarChar(64)
+  resourceId  String?    @map("resource_id") @db.VarChar(64)
+  meta        Json?
+  ip          String?    @db.VarChar(64)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id])
+
+  @@index([resource, createdAt])
+  @@index([adminUserId, createdAt])
+  @@map("audit_logs")
+}
+
+model SiteSetting {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique @map("setting_key") @db.VarChar(128)
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("site_settings")
+}
+
+model FeaturedCollection {
+  id          Int                      @id @default(autoincrement())
+  slug        String                   @unique @db.VarChar(128)
+  title       String                   @db.VarChar(512)
+  description String?                  @db.Text
+  kind        String                   @db.VarChar(24)
+  config      Json
+  published   Boolean                  @default(false)
+  sort        Int                      @default(0)
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  items       FeaturedCollectionItem[]
+
+  @@map("featured_collections")
+}
+
+model FeaturedCollectionItem {
+  collectionId Int                @map("collection_id")
+  schemeId     Int                @map("scheme_id")
+  sort         Int                @default(0)
+  collection   FeaturedCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  scheme       Scheme             @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, schemeId])
+  @@map("featured_collection_items")
 }

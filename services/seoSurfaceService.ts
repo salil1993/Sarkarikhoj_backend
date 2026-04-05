@@ -31,7 +31,7 @@ function cacheKey(type: SeoSurfaceType, q: Record<string, string>): string {
 
 async function rowsToPublic(where: Prisma.SchemeWhereInput): Promise<PublicScheme[]> {
   const rows = await prisma.scheme.findMany({
-    where,
+    where: { AND: [{ publishStatus: "published" }, where] },
     include: listInclude,
     orderBy: { updated_at: "desc" },
     take: 80,

@@ -20,6 +20,7 @@ export async function buildUserRecommendations(externalId: string) {
     where: { externalId },
     include: {
       savedSchemes: {
+        where: { scheme: { publishStatus: "published" } },
         include: {
           scheme: { select: { id: true, slug: true, scheme_name: true, apply_link: true } },
         },

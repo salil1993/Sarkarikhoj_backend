@@ -19,6 +19,7 @@ export type ListSchemesParams = {
 };
 
 export async function listPublicSchemes(params: ListSchemesParams): Promise<PublicScheme[]> {
+  const published: Prisma.SchemeWhereInput = { publishStatus: "published" };
   const clauses: Prisma.SchemeWhereInput[] = [];
 
   if (params.state) {
@@ -58,10 +59,11 @@ export async function listPublicSchemes(params: ListSchemesParams): Promise<Publ
     });
   }
 
-  const where: Prisma.SchemeWhereInput = clauses.length > 0 ? { AND: clauses } : {};
+  const where: Prisma.SchemeWhereInput =
+    clauses.length > 0 ? { AND: [published, ...clauses] } : published;
 
   const rows = await prisma.scheme.findMany({
-    where: clauses.length > 0 ? where : undefined,
+    where,
     include: listInclude,
     orderBy: { scheme_name: "asc" },
   });

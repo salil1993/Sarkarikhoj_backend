@@ -6,7 +6,7 @@ import type { ScoredSchemeResult } from "@/types/platform";
 import { isSchemeEligible } from "@/services/eligibilityEngine";
 
 /** Bump when cache shape changes (avoids stale/corrupt Redis breaking scoring). */
-const CACHE_KEY = "platform:schemes:scoring:v2";
+const CACHE_KEY = "platform:schemes:scoring:v3";
 const CACHE_TTL = 120;
 
 /**
@@ -33,6 +33,7 @@ type EligibilityRuleRow = SchemeWithScoreDeps["eligibilityRules"][number];
 type SchemeTagRow = SchemeWithScoreDeps["tags"][number];
 
 const scoringFindManyArgs = {
+  where: { publishStatus: "published" },
   include: {
     tags: { include: { tag: true } },
     eligibilityRules: true,
@@ -277,7 +278,10 @@ function isValidScoringCache(data: unknown): data is SchemeWithScoreDeps[] {
  * falls back to legacy columns only so `/api/check-eligibility` still works.
  */
 async function loadSchemesLegacyFromDb(): Promise<SchemeWithScoreDeps[]> {
-  const rows = await prisma.scheme.findMany({ orderBy: { id: "asc" } });
+  const rows = await prisma.scheme.findMany({
+    where: { publishStatus: "published" },
+    orderBy: { id: "asc" },
+  });
   return schemesAsLegacyOnly(rows);
 }
 

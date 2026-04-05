@@ -1,4 +1,5 @@
 import { Prisma, PrismaClient } from "@prisma/client";
+import { SITE_SETTING_KEYS } from "../services/siteSettingsService";
 
 const prisma = new PrismaClient();
 
@@ -23,6 +24,39 @@ function splitDocs(raw: string): string[] {
 }
 
 async function main() {
+  const categoryDefs = [
+    { slug: "agriculture", label: "Agriculture", sort: 1 },
+    { slug: "housing", label: "Housing", sort: 2 },
+    { slug: "health", label: "Health", sort: 3 },
+    { slug: "welfare", label: "Welfare", sort: 4 },
+  ];
+  const categoryIdBySlug = new Map<string, number>();
+  for (const c of categoryDefs) {
+    const row = await prisma.schemeCategory.upsert({
+      where: { slug: c.slug },
+      create: c,
+      update: { label: c.label, sort: c.sort },
+    });
+    categoryIdBySlug.set(c.slug, row.id);
+  }
+
+  await prisma.siteSetting.upsert({
+    where: { key: SITE_SETTING_KEYS.UI_INDICATIVE_LABEL },
+    create: {
+      key: SITE_SETTING_KEYS.UI_INDICATIVE_LABEL,
+      value: { text: "Indicative match only — not government approval" },
+    },
+    update: {},
+  });
+  await prisma.siteSetting.upsert({
+    where: { key: SITE_SETTING_KEYS.UI_OFFICIAL_LINK_LABEL },
+    create: {
+      key: SITE_SETTING_KEYS.UI_OFFICIAL_LINK_LABEL,
+      value: { text: "Official application link (external government or authorised portal)" },
+    },
+    update: {},
+  });
+
   const tagDefs = [
     { slug: "farmer", label: "Farmers" },
     { slug: "women", label: "Women" },
@@ -125,9 +159,10 @@ async function main() {
 
   for (const s of schemes) {
     const { tagSlugs, ...core } = s;
+    const categoryId = core.category ? categoryIdBySlug.get(core.category) : undefined;
     const scheme = await prisma.scheme.upsert({
       where: { slug: core.slug },
-      create: core,
+      create: { ...core, categoryId: categoryId ?? undefined },
       update: {
         scheme_name: core.scheme_name,
         description: core.description,
@@ -142,6 +177,7 @@ async function main() {
         apply_link: core.apply_link,
         category: core.category,
         district: core.district,
+        categoryId: categoryId ?? undefined,
       },
     });
 

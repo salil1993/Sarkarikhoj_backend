@@ -81,7 +81,9 @@ export async function queryEligibleSchemes(
   criteria: NormalizedEligibilityInput,
 ): Promise<Scheme[]> {
   return prisma.scheme.findMany({
-    where: buildEligibilityWhereInput(criteria),
+    where: {
+      AND: [{ publishStatus: "published" }, buildEligibilityWhereInput(criteria)],
+    },
     orderBy: { scheme_name: "asc" },
   });
 }

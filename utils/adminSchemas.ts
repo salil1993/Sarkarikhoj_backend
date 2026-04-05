@@ -101,3 +101,27 @@ export const paginationQuerySchema = z.object({
 export const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
+
+const siteSettingEntrySchema = z.object({
+  key: z.string().min(1).max(128),
+  value: z.any(),
+});
+
+export const adminSettingsPutSchema = z.object({
+  settings: z.array(siteSettingEntrySchema).min(1).max(200),
+});
+
+export const featuredCollectionCreateSchema = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "invalid slug format"),
+  title: z.string().min(1).max(512),
+  description: z.string().max(20_000).optional().nullable(),
+  kind: z.enum(["manual", "auto_trending", "auto_state", "auto_category"]),
+  config: z.record(z.string(), z.unknown()).optional(),
+  published: z.boolean().optional(),
+  sort: z.number().int().optional(),
+  schemeIds: z.array(z.number().int().positive()).max(200).optional(),
+});

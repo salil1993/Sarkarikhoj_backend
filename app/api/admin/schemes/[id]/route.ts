@@ -1,10 +1,12 @@
 import { schemesAdmin } from "@/controllers/admin/schemesAdminController";
+import { recordAuditLog } from "@/services/auditLogService";
 import { requireAdminSecret } from "@/utils/adminAuth";
 import { idParamSchema, schemeUpdateSchema } from "@/utils/adminSchemas";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
 import { handleRouteError, HttpError, jsonError, jsonRateLimited } from "@/utils/errors";
 import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
+import { getClientIp } from "@/utils/requestMeta";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 import { NextResponse } from "next/server";
 
@@ -51,6 +53,14 @@ export async function PUT(request: Request, ctx: RouteCtx) {
     if (!scheme) {
       throw new HttpError(404, "NOT_FOUND", "Scheme not found.");
     }
+    void recordAuditLog({
+      actor: "admin_secret",
+      action: "scheme.update",
+      resource: "scheme",
+      resourceId: String(scheme.id),
+      meta: { slug: scheme.slug },
+      ip: getClientIp(request),
+    });
     return jsonPublicOk({ scheme }, { headers: mergeHeaders(undefined, cors) });
   } catch (err) {
     const res = handleRouteError(err, "admin-schemes-update");
@@ -87,6 +97,13 @@ export async function DELETE(request: Request, ctx: RouteCtx) {
     if (!ok) {
       throw new HttpError(404, "NOT_FOUND", "Scheme not found.");
     }
+    void recordAuditLog({
+      actor: "admin_secret",
+      action: "scheme.delete",
+      resource: "scheme",
+      resourceId: String(idParsed.data.id),
+      ip: getClientIp(request),
+    });
     return jsonPublicOk({ deleted: true, id: idParsed.data.id }, { headers: mergeHeaders(undefined, cors) });
   } catch (err) {
     const res = handleRouteError(err, "admin-schemes-delete");

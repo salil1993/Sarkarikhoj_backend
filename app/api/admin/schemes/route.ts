@@ -1,4 +1,5 @@
 import { schemesAdmin } from "@/controllers/admin/schemesAdminController";
+import { recordAuditLog } from "@/services/auditLogService";
 import { requireAdminSecret } from "@/utils/adminAuth";
 import { parsePaginationFromUrl } from "@/utils/adminPagination";
 import { schemeCreateSchema } from "@/utils/adminSchemas";
@@ -6,6 +7,7 @@ import { corsHeaders, mergeHeaders } from "@/utils/cors";
 import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
 import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
+import { getClientIp } from "@/utils/requestMeta";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 import { NextResponse } from "next/server";
 
@@ -67,6 +69,14 @@ export async function POST(request: Request) {
     }
 
     const scheme = await schemesAdmin.create(parsed.data);
+    void recordAuditLog({
+      actor: "admin_secret",
+      action: "scheme.create",
+      resource: "scheme",
+      resourceId: String(scheme.id),
+      meta: { slug: scheme.slug },
+      ip: getClientIp(request),
+    });
     return jsonPublicOk({ scheme }, { status: 201, headers: mergeHeaders(undefined, cors) });
   } catch (err) {
     const res = handleRouteError(err, "admin-schemes-create");

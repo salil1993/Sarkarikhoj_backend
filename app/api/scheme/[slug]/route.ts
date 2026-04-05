@@ -39,7 +39,7 @@ export async function GET(request: Request, context: RouteContext) {
       },
     });
 
-    if (!scheme) {
+    if (!scheme || scheme.publishStatus !== "published") {
       throw new HttpError(404, "NOT_FOUND", "Scheme not found");
     }
 
