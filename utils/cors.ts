@@ -1,5 +1,12 @@
-function parseOrigins(): Set<string> | null {
-  const raw = process.env.CORS_ORIGINS?.trim();
+/** Prefer CORS_ORIGIN (Vercel); CORS_ORIGINS kept for backward compatibility. */
+function rawOriginsFromEnv(): string | undefined {
+  const a = process.env.CORS_ORIGIN?.trim();
+  const b = process.env.CORS_ORIGINS?.trim();
+  return a || b || undefined;
+}
+
+export function parseAllowedOrigins(): Set<string> | null {
+  const raw = rawOriginsFromEnv();
   if (!raw) return null;
   return new Set(
     raw
@@ -9,9 +16,9 @@ function parseOrigins(): Set<string> | null {
   );
 }
 
-export function corsHeaders(request: Request): Record<string, string> {
+export function corsHeaders(request: { headers: Headers }): Record<string, string> {
   const origin = request.headers.get("origin");
-  const allowed = parseOrigins();
+  const allowed = parseAllowedOrigins();
   if (!origin || !allowed || allowed.size === 0) {
     return {};
   }

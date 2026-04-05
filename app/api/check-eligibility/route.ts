@@ -7,11 +7,7 @@ import { parseEligibilityBody } from "@/utils/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-export async function OPTIONS(request: Request) {
-  const cors = corsHeaders(request);
-  return new NextResponse(null, { status: 204, headers: mergeHeaders(undefined, cors) });
-}
+export const maxDuration = 30;
 
 export async function POST(request: Request) {
   const cors = corsHeaders(request);
@@ -71,7 +67,7 @@ export async function POST(request: Request) {
       { status: 200, headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
-    const res = handleRouteError(err);
+    const res = handleRouteError(err, "check-eligibility");
     const h = mergeHeaders(res.headers, cors);
     return new NextResponse(res.body, { status: res.status, headers: h });
   }

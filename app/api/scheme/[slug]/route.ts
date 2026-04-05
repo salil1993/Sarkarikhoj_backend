@@ -10,11 +10,6 @@ export const runtime = "nodejs";
 
 type RouteContext = { params: Promise<{ slug: string }> };
 
-export async function OPTIONS(request: Request) {
-  const cors = corsHeaders(request);
-  return new NextResponse(null, { status: 204, headers: mergeHeaders(undefined, cors) });
-}
-
 export async function GET(request: Request, context: RouteContext) {
   const cors = corsHeaders(request);
   try {
@@ -53,7 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
       { status: 200, headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
-    const res = handleRouteError(err);
+    const res = handleRouteError(err, "scheme-by-slug");
     const h = mergeHeaders(res.headers, cors);
     return new NextResponse(res.body, { status: res.status, headers: h });
   }

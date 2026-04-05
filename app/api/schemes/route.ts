@@ -7,11 +7,6 @@ import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function OPTIONS(request: Request) {
-  const cors = corsHeaders(request);
-  return new NextResponse(null, { status: 204, headers: mergeHeaders(undefined, cors) });
-}
-
 export async function GET(request: Request) {
   const cors = corsHeaders(request);
   try {
@@ -40,7 +35,7 @@ export async function GET(request: Request) {
       { status: 200, headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
-    const res = handleRouteError(err);
+    const res = handleRouteError(err, "schemes");
     const h = mergeHeaders(res.headers, cors);
     return new NextResponse(res.body, { status: res.status, headers: h });
   }

@@ -13,7 +13,8 @@ This project is a **Next.js App Router** app deployed on **Vercel** as serverles
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `DATABASE_URL` | Yes | MySQL connection string for Prisma |
-| `CORS_ORIGINS` | No | Comma-separated list of allowed browser `Origin` values |
+| `CORS_ORIGIN` | No | Comma-separated allowed browser `Origin` values (preferred on Vercel) |
+| `CORS_ORIGINS` | No | Same as `CORS_ORIGIN` if set (legacy fallback) |
 | `UPSTASH_REDIS_REST_URL` | No* | Upstash Redis REST URL for **distributed** rate limiting |
 | `UPSTASH_REDIS_REST_TOKEN` | No* | Upstash Redis REST token |
 
@@ -24,7 +25,7 @@ Example `.env.local` (local):
 ```bash
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/DATABASE_NAME"
 # Optional:
-# CORS_ORIGINS="https://your-frontend.vercel.app,http://localhost:3000"
+# CORS_ORIGIN="https://sarkarikhojkhabar.com,https://www.sarkarikhojkhabar.com"
 # UPSTASH_REDIS_REST_URL="https://....upstash.io"
 # UPSTASH_REDIS_REST_TOKEN="..."
 ```
