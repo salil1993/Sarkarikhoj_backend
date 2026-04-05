@@ -79,13 +79,26 @@ export async function POST(request: Request) {
 
     let results: ScoredSchemeResult[];
     if (options.mode === "scored") {
-      const hit = await cacheGetJson<ScoredSchemeResult[]>(ck);
-      if (hit) {
+      let hit: ScoredSchemeResult[] | null = null;
+      try {
+        hit = await cacheGetJson<ScoredSchemeResult[]>(ck);
+      } catch (e) {
+        console.error("[check-eligibility] cache get skipped", {
+          name: e instanceof Error ? e.name : "unknown",
+        });
+      }
+      if (Array.isArray(hit) && hit.every((r) => r && typeof r.schemeId === "number")) {
         results = hit;
       } else {
         const schemes = await loadSchemesForScoring();
         results = scoreSchemes(schemes, options.criteria, userTags, options.mode, options.limit);
-        await cacheSetJson(ck, results, ELIG_CACHE_TTL);
+        try {
+          await cacheSetJson(ck, results, ELIG_CACHE_TTL);
+        } catch (e) {
+          console.error("[check-eligibility] cache set skipped", {
+            name: e instanceof Error ? e.name : "unknown",
+          });
+        }
       }
     } else {
       const schemes = await loadSchemesForScoring();
@@ -93,9 +106,12 @@ export async function POST(request: Request) {
     }
 
     const ids = results.map((r) => r.schemeId);
-    const schemeRows = await prisma.scheme.findMany({
-      where: { id: { in: ids } },
-    });
+    const schemeRows =
+      ids.length === 0
+        ? []
+        : await prisma.scheme.findMany({
+            where: { id: { in: ids } },
+          });
     const schemeMap = new Map(schemeRows.map((s) => [s.id, s]));
     const ordered = ids.map((sid) => schemeMap.get(sid)).filter((s): s is NonNullable<typeof s> => s != null);
 
@@ -113,15 +129,27 @@ export async function POST(request: Request) {
     });
 
     if (options.userExternalId) {
-      const user = await ensureUserByExternalId(options.userExternalId.trim());
-      await prisma.userEligibilityCheck.create({
-        data: {
-          userId: user.id,
-          payload: options.criteria as object,
-          results: { results } as object,
-        },
-      });
-      void notifyHighMatch(user.id, results);
+      try {
+        const user = await ensureUserByExternalId(options.userExternalId.trim());
+        await prisma.userEligibilityCheck.create({
+          data: {
+            userId: user.id,
+            payload: options.criteria as object,
+            results: { results } as object,
+          },
+        });
+        try {
+          await notifyHighMatch(user.id, results);
+        } catch (e) {
+          console.error("[check-eligibility] notifyHighMatch failed", {
+            name: e instanceof Error ? e.name : "unknown",
+          });
+        }
+      } catch (e) {
+        console.error("[check-eligibility] persist eligibility history failed", {
+          name: e instanceof Error ? e.name : "unknown",
+        });
+      }
     }
 
     return jsonPublicOk(

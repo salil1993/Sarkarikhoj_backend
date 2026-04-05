@@ -332,6 +332,17 @@ export async function loadSchemesForScoring(): Promise<SchemeWithScoreDeps[]> {
   }
 }
 
+/** Cached scheme rows are JSON; `updated_at` is often an ISO string, not a `Date`. */
+function lastUpdatedIso(s: SchemeWithScoreDeps): string {
+  const u = s.updated_at as unknown;
+  if (u instanceof Date && !Number.isNaN(u.getTime())) return u.toISOString();
+  if (typeof u === "string") {
+    const d = new Date(u);
+    if (!Number.isNaN(d.getTime())) return d.toISOString();
+  }
+  return new Date(0).toISOString();
+}
+
 export function scoreSchemes(
   schemes: SchemeWithScoreDeps[],
   criteria: NormalizedEligibilityInput,
@@ -358,7 +369,7 @@ export function scoreSchemes(
       title: scheme.scheme_name,
       apply_link: scheme.apply_link,
       official_url: scheme.apply_link,
-      last_updated: scheme.updated_at.toISOString(),
+      last_updated: lastUpdatedIso(scheme),
       eligibilityScore: score,
       matchedCriteria: matched,
       missingCriteria: missing,
