@@ -3,7 +3,8 @@ import { z } from "zod";
 import { importSchemesFromCsvRows, parseCsv } from "@/services/ingestion/importCsv";
 import { requireAdminSecret } from "@/utils/adminAuth";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
-import { handleRouteError, jsonError } from "@/utils/errors";
+import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 
@@ -21,10 +22,7 @@ export async function POST(request: Request) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`admin-import:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
-        { status: 429, headers: mergeHeaders(undefined, cors) },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     requireAdminSecret(request);
@@ -44,9 +42,9 @@ export async function POST(request: Request) {
     const rows = parseCsv(parsed.data.csv);
     const result = await importSchemesFromCsvRows(rows);
 
-    return NextResponse.json(
-      { ok: true, data: { upserted: result.upserted, errors: result.errors } },
-      { status: 200, headers: mergeHeaders(undefined, cors) },
+    return jsonPublicOk(
+      { upserted: result.upserted, errors: result.errors },
+      { headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
     const res = handleRouteError(err, "admin-import");

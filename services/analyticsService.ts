@@ -5,7 +5,10 @@ export type AnalyticsEventType =
   | "eligibility_check"
   | "scheme_view"
   | "scheme_click"
-  | "scheme_share";
+  | "scheme_share"
+  | "scheme_search"
+  | "seo_surface"
+  | "conversion";
 
 export async function recordAnalyticsEvent(eventType: AnalyticsEventType, meta?: Record<string, unknown>) {
   try {

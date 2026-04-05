@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import type { ApiErrorBody } from "@/types/eligibility";
+import { LEGAL_DISCLOSURE } from "@/services/legalDisclosure";
 
 export class HttpError extends Error {
   constructor(
@@ -27,9 +28,36 @@ export function jsonError(
 ): NextResponse<ApiErrorBody> {
   const body: ApiErrorBody = {
     ok: false,
+    legal: LEGAL_DISCLOSURE,
     error: details !== undefined ? { code, message, details } : { code, message },
   };
   return NextResponse.json(body, { status });
+}
+
+export function jsonRateLimited(
+  reset: number | undefined,
+  corsHeadersInit: Record<string, string> | undefined,
+): NextResponse<ApiErrorBody> {
+  return NextResponse.json(
+    {
+      ok: false,
+      legal: LEGAL_DISCLOSURE,
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many requests. Please try again later.",
+        details: { reset },
+      },
+    },
+    {
+      status: 429,
+      headers: {
+        ...corsHeadersInit,
+        "Retry-After": reset
+          ? String(Math.max(1, Math.ceil((reset - Date.now()) / 1000)))
+          : "60",
+      },
+    },
+  );
 }
 
 /** Safe structured log — no connection strings or stack traces to stdout by default. */
@@ -80,6 +108,8 @@ function mapPrismaError(err: unknown): NextResponse<ApiErrorBody> | null {
         return jsonError(503, "DATABASE_UNAVAILABLE", "Database is temporarily unavailable.");
       case "P2025":
         return jsonError(404, "NOT_FOUND", "Record not found.");
+      case "P2002":
+        return jsonError(409, "CONFLICT", "A record with this unique value already exists.");
       default:
         return jsonError(503, "DATABASE_ERROR", "A database error occurred.");
     }
@@ -92,7 +122,12 @@ export function handleRouteError(err: unknown, context = "route"): NextResponse<
     return jsonError(err.status, err.code, err.message, err.details);
   }
   if (err instanceof ZodError) {
-    return jsonError(400, "VALIDATION_ERROR", "Invalid request", zodToDetails(err));
+    const flat = zodToDetails(err);
+    const fields = err.issues.map((i) => ({
+      field: i.path.length ? i.path.join(".") : "(root)",
+      error: i.message,
+    }));
+    return jsonError(400, "VALIDATION_ERROR", "Invalid request", { ...flat, fields });
   }
   const prismaRes = mapPrismaError(err);
   if (prismaRes) return prismaRes;

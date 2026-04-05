@@ -11,7 +11,7 @@ function splitDocs(raw: string): string[] {
 }
 
 /**
- * Expects header row: scheme_name,slug,description,min_age,max_age,income_limit,gender,occupation,state,benefit,documents_required,apply_link,tags (optional comma-separated slugs)
+ * Expects header row: scheme_name,slug,description,min_age,max_age,income_limit,gender,occupation,state,district,category,benefit,documents_required,apply_link,eligibility_rules_json (optional JSON string),tags (optional comma-separated slugs)
  */
 export async function importSchemesFromCsvRows(rows: CsvRow[]): Promise<{ upserted: number; errors: string[] }> {
   const errors: string[] = [];
@@ -26,6 +26,16 @@ export async function importSchemesFromCsvRows(rows: CsvRow[]): Promise<{ upsert
         continue;
       }
 
+      let rulesJson: object | undefined;
+      if (r.eligibility_rules_json?.trim()) {
+        try {
+          rulesJson = JSON.parse(r.eligibility_rules_json.trim()) as object;
+        } catch {
+          errors.push(`row ${i + 1}: invalid eligibility_rules_json`);
+          continue;
+        }
+      }
+
       const scheme = await prisma.scheme.upsert({
         where: { slug },
         create: {
@@ -38,9 +48,12 @@ export async function importSchemesFromCsvRows(rows: CsvRow[]): Promise<{ upsert
           gender: r.gender?.trim() || "any",
           occupation: r.occupation?.trim() || "any",
           state: r.state?.trim() || "any",
+          district: r.district?.trim() || null,
+          category: r.category?.trim().toLowerCase() || null,
           benefit: r.benefit?.trim() || "",
           documents_required: r.documents_required?.trim() || "",
           apply_link: r.apply_link?.trim() || "https://india.gov.in/",
+          eligibility_rules_json: rulesJson,
         },
         update: {
           scheme_name: r.scheme_name?.trim() || slug,
@@ -51,9 +64,12 @@ export async function importSchemesFromCsvRows(rows: CsvRow[]): Promise<{ upsert
           gender: r.gender?.trim() || "any",
           occupation: r.occupation?.trim() || "any",
           state: r.state?.trim() || "any",
+          district: r.district?.trim() || null,
+          category: r.category?.trim().toLowerCase() || null,
           benefit: r.benefit?.trim() || "",
           documents_required: r.documents_required?.trim() || "",
           apply_link: r.apply_link?.trim() || "https://india.gov.in/",
+          eligibility_rules_json: rulesJson ?? undefined,
         },
       });
 

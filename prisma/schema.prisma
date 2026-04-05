@@ -8,24 +8,27 @@ datasource db {
 }
 
 model Scheme {
-  id                  Int      @id @default(autoincrement())
-  scheme_name         String   @map("scheme_name") @db.VarChar(512)
-  slug                String   @unique @db.VarChar(255)
-  description         String   @db.Text
-  min_age             Int?
-  max_age             Int?
-  income_limit        Int?     @map("income_limit")
-  gender              String?  @db.VarChar(32)
-  occupation          String?  @db.VarChar(128)
-  state               String?  @db.VarChar(128)
-  benefit             String   @db.Text
-  documents_required  String   @map("documents_required") @db.Text
-  apply_link          String   @map("apply_link") @db.VarChar(2048)
-  ai_description      String?  @map("ai_description") @db.Text
-  ai_benefits_summary String?  @map("ai_benefits_summary") @db.Text
-  ai_faqs             Json?    @map("ai_faqs")
-  created_at          DateTime @default(now()) @map("created_at")
-  updated_at          DateTime @updatedAt @map("updated_at")
+  id                      Int      @id @default(autoincrement())
+  scheme_name             String   @map("scheme_name") @db.VarChar(512)
+  slug                    String   @unique @db.VarChar(255)
+  description             String   @db.Text
+  min_age                 Int?
+  max_age                 Int?
+  income_limit            Int?     @map("income_limit")
+  gender                  String?  @db.VarChar(32)
+  occupation              String?  @db.VarChar(128)
+  state                   String?  @db.VarChar(128)
+  district                String?  @db.VarChar(128)
+  category                String?  @db.VarChar(64)
+  benefit                 String   @db.Text
+  documents_required      String   @map("documents_required") @db.Text
+  apply_link              String   @map("apply_link") @db.VarChar(2048)
+  eligibility_rules_json  Json?    @map("eligibility_rules_json")
+  ai_description          String?  @map("ai_description") @db.Text
+  ai_benefits_summary     String?  @map("ai_benefits_summary") @db.Text
+  ai_faqs                 Json?    @map("ai_faqs")
+  created_at              DateTime @default(now()) @map("created_at")
+  updated_at              DateTime @updatedAt @map("updated_at")
 
   tags             SchemeOnTag[]
   eligibilityRules EligibilityRule[]
@@ -35,6 +38,8 @@ model Scheme {
   faqs             SchemeFaq[]
   savedBy          SavedScheme[]
 
+  @@index([state, district])
+  @@index([category])
   @@map("schemes")
 }
 
@@ -179,4 +184,34 @@ model SchemeFaq {
 
   @@index([schemeId])
   @@map("scheme_faqs")
+}
+
+model SeoBlogPost {
+  id            Int      @id @default(autoincrement())
+  slug          String   @unique @db.VarChar(255)
+  title         String   @db.VarChar(512)
+  excerpt       String?  @db.Text
+  body          String   @db.Text
+  faqs          Json?
+  focusKeyword  String?  @map("focus_keyword") @db.VarChar(128)
+  published     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("seo_blog_posts")
+}
+
+model SeoPage {
+  id          Int      @id @default(autoincrement())
+  type        String   @db.VarChar(32)
+  slug        String   @unique @db.VarChar(255)
+  title       String   @db.VarChar(512)
+  description String?  @db.Text
+  payload     Json
+  published   Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([type])
+  @@map("seo_pages")
 }

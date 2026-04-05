@@ -1,16 +1,20 @@
 import { PrismaClient } from "@prisma/client";
 
-const globalForPrisma = globalThis as typeof globalThis & {
-  prisma?: PrismaClient;
-};
-
-function createPrismaClient(): PrismaClient {
+function createPrismaClient() {
   return new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
   });
 }
 
-/** Single shared client — avoids extra connections during dev HMR and on warm serverless instances. */
-export const prisma: PrismaClient = globalForPrisma.prisma ?? createPrismaClient();
+const globalForPrisma = globalThis as typeof globalThis & {
+  prisma?: PrismaClient;
+};
+
+/**
+ * Cast to `PrismaClient` so TypeScript uses the full generated delegate surface
+ * (`schemeFaq`, `seoBlogPost`, …). Without it, `new PrismaClient({ log })` can infer
+ * a narrowed client type that omits models in some editor/TS setups.
+ */
+export const prisma = (globalForPrisma.prisma ?? createPrismaClient()) as PrismaClient;
 
 globalForPrisma.prisma = prisma;

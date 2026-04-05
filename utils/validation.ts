@@ -125,6 +125,8 @@ export type ValidationErrorDetails = {
   fieldErrors: Record<string, string[] | undefined>;
   formErrors: string[];
   issues: Array<{ path: string[]; message: string; code: string }>;
+  /** Flat list for clients: `{ field: "income", error: "must be positive" }` */
+  fields: Array<{ field: string; error: string }>;
 };
 
 export function formatValidationErrorDetails(error: z.ZodError): ValidationErrorDetails {
@@ -137,6 +139,10 @@ export function formatValidationErrorDetails(error: z.ZodError): ValidationError
       path: i.path.map(String),
       message: i.message,
       code: i.code,
+    })),
+    fields: error.issues.map((i) => ({
+      field: i.path.length ? i.path.join(".") : "(root)",
+      error: i.message,
     })),
   };
 }

@@ -1,4 +1,5 @@
 import type { Scheme } from "@prisma/client";
+import type { LegalDisclosure } from "@/types/legal";
 
 export type EligibilityCheckInput = {
   age: number;
@@ -22,6 +23,7 @@ export type EligibleScheme = Scheme;
 
 export type ApiErrorBody = {
   ok: false;
+  legal: LegalDisclosure;
   error: {
     code: string;
     message: string;

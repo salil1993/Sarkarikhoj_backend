@@ -3,7 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/db/client";
 import { invalidateTrendingCache } from "@/services/trendingService";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
-import { handleRouteError, jsonError } from "@/utils/errors";
+import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 import { ensureUserByExternalId } from "@/services/userService";
@@ -30,34 +31,20 @@ export async function POST(request: Request) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`engagements:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: {
-            code: "RATE_LIMITED",
-            message: "Too many requests. Please try again later.",
-            details: { reset: limited.reset },
-          },
-        },
-        { status: 429, headers: mergeHeaders(undefined, cors) },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: {
-            code: "INVALID_JSON",
-            message: "JSON body required",
-            details: { field: "body", error: "invalid_json" },
-          },
-        },
-        { status: 400, headers: mergeHeaders(undefined, cors) },
-      );
+      const res = jsonError(400, "INVALID_JSON", "JSON body required", {
+        fields: [{ field: "body", error: "invalid_json" }],
+      });
+      return new NextResponse(res.body, {
+        status: res.status,
+        headers: mergeHeaders(res.headers, cors),
+      });
     }
 
     const parsed = bodySchema.safeParse(body);
@@ -76,17 +63,13 @@ export async function POST(request: Request) {
     if (schemeId == null && slug) {
       const s = await prisma.scheme.findUnique({ where: { slug: slug.trim() } });
       if (!s) {
-        return NextResponse.json(
-          {
-            ok: false,
-            error: {
-              code: "NOT_FOUND",
-              message: "Scheme not found",
-              details: { field: "slug", error: "unknown_slug" },
-            },
-          },
-          { status: 404, headers: mergeHeaders(undefined, cors) },
-        );
+        const res = jsonError(404, "NOT_FOUND", "Scheme not found", {
+          fields: [{ field: "slug", error: "unknown_slug" }],
+        });
+        return new NextResponse(res.body, {
+          status: res.status,
+          headers: mergeHeaders(res.headers, cors),
+        });
       }
       schemeId = s.id;
     }
@@ -96,6 +79,11 @@ export async function POST(request: Request) {
       const u = await ensureUserByExternalId(extUser.trim());
       userDbId = u.id;
     }
+
+    const sRow = await prisma.scheme.findUnique({
+      where: { id: schemeId! },
+      select: { apply_link: true, scheme_name: true },
+    });
 
     await prisma.schemeEngagement.create({
       data: {
@@ -111,13 +99,21 @@ export async function POST(request: Request) {
     );
     void invalidateTrendingCache();
 
-    return NextResponse.json(
-      { ok: true, data: { recorded: true, schemeId, type } },
+    return jsonPublicOk(
+      {
+        recorded: true,
+        schemeId,
+        type,
+        official_url: sRow?.apply_link ?? "",
+        title: sRow?.scheme_name ?? "",
+      },
       { status: 201, headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
     const res = handleRouteError(err, "engagements");
-    const h = mergeHeaders(res.headers, cors);
-    return new NextResponse(res.body, { status: res.status, headers: h });
+    return new NextResponse(res.body, {
+      status: res.status,
+      headers: mergeHeaders(res.headers, cors),
+    });
   }
 }

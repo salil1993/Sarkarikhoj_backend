@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ensureUserByExternalId } from "@/services/userService";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
-import { handleRouteError, jsonError } from "@/utils/errors";
+import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 
@@ -21,13 +22,7 @@ export async function POST(request: Request) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`user-register:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: { code: "RATE_LIMITED", message: "Too many requests." },
-        },
-        { status: 429, headers: mergeHeaders(undefined, cors) },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     const body = await request.json().catch(() => null);
@@ -56,9 +51,9 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      { ok: true, data: { userId: user.id, externalId: user.externalId } },
-      { status: 200, headers: mergeHeaders(undefined, cors) },
+    return jsonPublicOk(
+      { userId: user.id, externalId: user.externalId },
+      { headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
     const res = handleRouteError(err, "user-register");

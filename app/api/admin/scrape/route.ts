@@ -3,7 +3,8 @@ import { z } from "zod";
 import { probePortalUrl } from "@/services/ingestion/portalProbe";
 import { requireAdminSecret } from "@/utils/adminAuth";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
-import { handleRouteError, jsonError } from "@/utils/errors";
+import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import { formatValidationErrorDetails, logValidationFailure } from "@/utils/validation";
 
@@ -21,10 +22,7 @@ export async function POST(request: Request) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`admin-scrape:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        { ok: false, error: { code: "RATE_LIMITED", message: "Too many requests." } },
-        { status: 429, headers: mergeHeaders(undefined, cors) },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     requireAdminSecret(request);
@@ -43,15 +41,12 @@ export async function POST(request: Request) {
 
     const probe = await probePortalUrl(parsed.data.url);
 
-    return NextResponse.json(
+    return jsonPublicOk(
       {
-        ok: true,
-        data: {
-          ...probe,
-          hint: "Use /api/admin/import with CSV for durable ingestion; dedupe by slug.",
-        },
+        ...probe,
+        hint: "Use /api/admin/import with CSV for durable ingestion; dedupe by slug.",
       },
-      { status: 200, headers: mergeHeaders(undefined, cors) },
+      { headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
     const res = handleRouteError(err, "admin-scrape");

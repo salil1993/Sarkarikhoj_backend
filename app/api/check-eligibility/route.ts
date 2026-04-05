@@ -11,7 +11,8 @@ import { notifyHighMatch } from "@/services/notificationService";
 import { ensureUserByExternalId } from "@/services/userService";
 import { cacheGetJson, cacheSetJson } from "@/utils/cache";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
-import { handleRouteError, jsonError } from "@/utils/errors";
+import { handleRouteError, jsonError, jsonRateLimited } from "@/utils/errors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import {
   formatValidationErrorDetails,
@@ -36,7 +37,7 @@ function eligCacheKey(
     .update(JSON.stringify({ criteria, tags, mode, limit }))
     .digest("hex")
     .slice(0, 40);
-  return `platform:elig:${h}`;
+  return `platform:elig:v3:${h}`;
 }
 
 export async function POST(request: Request) {
@@ -45,42 +46,20 @@ export async function POST(request: Request) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`check-eligibility:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: {
-            code: "RATE_LIMITED",
-            message: "Too many requests. Please try again later.",
-            details: { reset: limited.reset },
-          },
-        },
-        {
-          status: 429,
-          headers: mergeHeaders(undefined, {
-            ...cors,
-            "Retry-After": limited.reset
-              ? String(Math.max(1, Math.ceil((limited.reset - Date.now()) / 1000)))
-              : "60",
-          }),
-        },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     let body: unknown;
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: {
-            code: "INVALID_JSON",
-            message: "Request body must be valid JSON with Content-Type: application/json.",
-            details: { hint: "Send a JSON object; see API docs for required fields." },
-          },
-        },
-        { status: 400, headers: mergeHeaders(undefined, cors) },
-      );
+      const res = jsonError(400, "INVALID_JSON", "Request body must be valid JSON.", {
+        fields: [{ field: "body", error: "invalid_json" }],
+      });
+      return new NextResponse(res.body, {
+        status: res.status,
+        headers: mergeHeaders(res.headers, cors),
+      });
     }
 
     const parsed = parseCheckEligibilityFull(body);
@@ -118,7 +97,15 @@ export async function POST(request: Request) {
       where: { id: { in: ids } },
     });
     const schemeMap = new Map(schemeRows.map((s) => [s.id, s]));
-    const schemes = ids.map((sid) => schemeMap.get(sid)).filter((s): s is NonNullable<typeof s> => s != null);
+    const ordered = ids.map((sid) => schemeMap.get(sid)).filter((s): s is NonNullable<typeof s> => s != null);
+
+    const schemes = ordered.map((s) => ({
+      id: s.id,
+      title: s.scheme_name,
+      slug: s.slug,
+      official_url: s.apply_link,
+      last_updated: s.updated_at.toISOString(),
+    }));
 
     void recordAnalyticsEvent("eligibility_check", {
       mode: options.mode,
@@ -137,17 +124,14 @@ export async function POST(request: Request) {
       void notifyHighMatch(user.id, results);
     }
 
-    return NextResponse.json(
+    return jsonPublicOk(
       {
-        ok: true,
-        data: {
-          mode: options.mode,
-          results,
-          schemes,
-          count: results.length,
-        },
+        mode: options.mode,
+        results,
+        schemes,
+        count: results.length,
       },
-      { status: 200, headers: mergeHeaders(undefined, cors) },
+      { headers: mergeHeaders(undefined, cors) },
     );
   } catch (err) {
     const res = handleRouteError(err, "check-eligibility");

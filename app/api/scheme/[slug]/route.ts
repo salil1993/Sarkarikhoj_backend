@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/client";
 import { recordAnalyticsEvent } from "@/services/analyticsService";
-import { HttpError, handleRouteError } from "@/utils/errors";
+import { toPublicSchemeDetail, type SchemeDetailInclude } from "@/services/schemePresenter";
+import { HttpError, handleRouteError, jsonRateLimited } from "@/utils/errors";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
+import { jsonPublicOk } from "@/utils/publicApi";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
 import { parseSlugParam } from "@/utils/validation";
 
@@ -17,17 +19,7 @@ export async function GET(request: Request, context: RouteContext) {
     const id = getClientIdentifier(request);
     const limited = await rateLimit(`schemes:detail:${id}`);
     if (!limited.success) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: {
-            code: "RATE_LIMITED",
-            message: "Too many requests. Please try again later.",
-            details: { reset: limited.reset },
-          },
-        },
-        { status: 429, headers: mergeHeaders(undefined, cors) },
-      );
+      return jsonRateLimited(limited.reset, cors);
     }
 
     const { slug: rawSlug } = await context.params;
@@ -58,13 +50,14 @@ export async function GET(request: Request, context: RouteContext) {
       .catch(() => {});
     void recordAnalyticsEvent("scheme_view", { schemeId: scheme.id, slug: scheme.slug });
 
-    return NextResponse.json(
-      { ok: true, data: { scheme } },
-      { status: 200, headers: mergeHeaders(undefined, cors) },
-    );
+    const publicScheme = toPublicSchemeDetail(scheme as SchemeDetailInclude);
+
+    return jsonPublicOk({ scheme: publicScheme }, { headers: mergeHeaders(undefined, cors) });
   } catch (err) {
     const res = handleRouteError(err, "scheme-by-slug");
-    const h = mergeHeaders(res.headers, cors);
-    return new NextResponse(res.body, { status: res.status, headers: h });
+    return new NextResponse(res.body, {
+      status: res.status,
+      headers: mergeHeaders(res.headers, cors),
+    });
   }
 }

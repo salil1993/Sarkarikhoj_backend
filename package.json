@@ -13,6 +13,7 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
+    "db:setup": "prisma migrate deploy && prisma db seed",
     "db:ping": "printf 'SELECT 1' | prisma db execute --stdin --schema prisma/schema.prisma",
     "db:studio": "prisma studio"
   },

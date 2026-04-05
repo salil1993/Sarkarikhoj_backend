@@ -2,7 +2,7 @@ import { prisma } from "@/db/client";
 import { cacheDel, cacheGetJson, cacheSetJson } from "@/utils/cache";
 import type { TrendingRow } from "@/types/platform";
 
-const CACHE_KEY = "platform:trending:v1";
+const CACHE_KEY = "platform:trending:v2";
 const CACHE_TTL = 60;
 const DEFAULT_WINDOW_DAYS = 7;
 const DEFAULT_LIMIT = 20;
@@ -38,12 +38,15 @@ export async function computeTrendingSchemes(
     const fallback = await prisma.scheme.findMany({
       take,
       orderBy: { updated_at: "desc" },
-      select: { id: true, slug: true, scheme_name: true },
+      select: { id: true, slug: true, scheme_name: true, apply_link: true, updated_at: true },
     });
     return fallback.map((s) => ({
       schemeId: s.id,
       slug: s.slug,
       scheme_name: s.scheme_name,
+      title: s.scheme_name,
+      official_url: s.apply_link,
+      last_updated: s.updated_at.toISOString(),
       trendingScore: 0,
     }));
   }
@@ -51,7 +54,7 @@ export async function computeTrendingSchemes(
   const ids = raw.map((r) => r.scheme_id);
   const schemes = await prisma.scheme.findMany({
     where: { id: { in: ids } },
-    select: { id: true, slug: true, scheme_name: true },
+    select: { id: true, slug: true, scheme_name: true, apply_link: true, updated_at: true },
   });
   const byId = new Map(schemes.map((s) => [s.id, s]));
 
@@ -64,6 +67,9 @@ export async function computeTrendingSchemes(
         schemeId: s.id,
         slug: s.slug,
         scheme_name: s.scheme_name,
+        title: s.scheme_name,
+        official_url: s.apply_link,
+        last_updated: s.updated_at.toISOString(),
         trendingScore: ts,
       };
     })

@@ -1,6 +1,19 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
+
+function explainSeedFailure(e: unknown): void {
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2021") {
+    const table = (e.meta as { table?: string } | undefined)?.table ?? "unknown";
+    console.error(
+      `\nMissing table "${table}". Run migrations before seeding:\n` +
+        "  npm run db:migrate:dev   — local (creates/applies migrations)\n" +
+        "  npm run db:migrate       — production: prisma migrate deploy\n",
+    );
+    return;
+  }
+  console.error(e);
+}
 
 function splitDocs(raw: string): string[] {
   return raw
@@ -46,6 +59,8 @@ async function main() {
       documents_required:
         "Aadhaar; land ownership / cultivation records; bank account details; PM-KISAN registration (as applicable).",
       apply_link: "https://pmkisan.gov.in/",
+      category: "agriculture",
+      district: null as string | null,
       tagSlugs: ["farmer", "general"],
     },
     {
@@ -64,6 +79,8 @@ async function main() {
       documents_required:
         "Aadhaar; income proof; address proof; property documents / allotment letter; bank statements as per lender norms.",
       apply_link: "https://pmaymis.gov.in/",
+      category: "housing",
+      district: null as string | null,
       tagSlugs: ["housing", "general"],
     },
     {
@@ -81,6 +98,8 @@ async function main() {
       documents_required:
         "Ayushman card / e-card; Aadhaar; ration card or SECC-based eligibility proof as per state guidelines.",
       apply_link: "https://pmjay.gov.in/",
+      category: "health",
+      district: null as string | null,
       tagSlugs: ["health", "general"],
     },
     {
@@ -98,6 +117,8 @@ async function main() {
       documents_required:
         "Aadhaar; BPL / ration card or other prescribed poverty-line proof; bank account (where applicable).",
       apply_link: "https://www.pmuy.gov.in/",
+      category: "welfare",
+      district: null as string | null,
       tagSlugs: ["women", "general"],
     },
   ];
@@ -119,6 +140,8 @@ async function main() {
         benefit: core.benefit,
         documents_required: core.documents_required,
         apply_link: core.apply_link,
+        category: core.category,
+        district: core.district,
       },
     });
 
@@ -224,7 +247,7 @@ main()
     await prisma.$disconnect();
   })
   .catch(async (e) => {
-    console.error(e);
+    explainSeedFailure(e);
     await prisma.$disconnect();
     process.exit(1);
   });

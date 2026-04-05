@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/client";
+import { legalEnvelope } from "@/services/legalDisclosure";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,5 +18,5 @@ export async function GET() {
     console.error("[api] health: database check failed");
   }
 
-  return NextResponse.json({ ok: true, db });
+  return NextResponse.json(legalEnvelope({ ok: true, db }));
 }
