@@ -17,8 +17,10 @@ This project is a **Next.js App Router** app deployed on **Vercel** as serverles
 | `CORS_ORIGINS` | No | Same as `CORS_ORIGIN` if set (legacy fallback) |
 | `UPSTASH_REDIS_REST_URL` | No* | Upstash Redis REST URL for **distributed** rate limiting |
 | `UPSTASH_REDIS_REST_TOKEN` | No* | Upstash Redis REST token |
+| `ADMIN_SECRET` | No | Required for `/api/analytics/dashboard`, `/api/admin/*` |
+| `GROQ_API_KEY` / `OPENAI_API_KEY` | No | Optional; powers `POST /api/admin/ai-content` |
 
-\*If both Upstash variables are omitted, the API uses an **in-memory** rate limiter. That is only suitable for single-instance or local development. On Vercel, **set Upstash** (or another shared store) for consistent limits across function instances.
+\*If both Upstash variables are omitted, the API uses an **in-memory** rate limiter and in-memory API cache. On Vercel, **set Upstash** for consistent rate limits, **trending cache**, and short **eligibility score** cache.
 
 Example `.env.local` (local):
 

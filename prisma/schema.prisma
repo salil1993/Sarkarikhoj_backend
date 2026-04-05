@@ -8,21 +8,175 @@ datasource db {
 }
 
 model Scheme {
-  id                 Int      @id @default(autoincrement())
-  scheme_name        String   @map("scheme_name") @db.VarChar(512)
-  slug               String   @unique @db.VarChar(255)
-  description        String   @db.Text
-  min_age            Int?
-  max_age            Int?
-  income_limit       Int?     @map("income_limit")
-  gender             String?  @db.VarChar(32)
-  occupation         String?  @db.VarChar(128)
-  state              String?  @db.VarChar(128)
-  benefit            String   @db.Text
-  documents_required String   @map("documents_required") @db.Text
-  apply_link         String   @map("apply_link") @db.VarChar(2048)
-  created_at         DateTime @default(now()) @map("created_at")
-  updated_at         DateTime @updatedAt @map("updated_at")
+  id                  Int      @id @default(autoincrement())
+  scheme_name         String   @map("scheme_name") @db.VarChar(512)
+  slug                String   @unique @db.VarChar(255)
+  description         String   @db.Text
+  min_age             Int?
+  max_age             Int?
+  income_limit        Int?     @map("income_limit")
+  gender              String?  @db.VarChar(32)
+  occupation          String?  @db.VarChar(128)
+  state               String?  @db.VarChar(128)
+  benefit             String   @db.Text
+  documents_required  String   @map("documents_required") @db.Text
+  apply_link          String   @map("apply_link") @db.VarChar(2048)
+  ai_description      String?  @map("ai_description") @db.Text
+  ai_benefits_summary String?  @map("ai_benefits_summary") @db.Text
+  ai_faqs             Json?    @map("ai_faqs")
+  created_at          DateTime @default(now()) @map("created_at")
+  updated_at          DateTime @updatedAt @map("updated_at")
+
+  tags             SchemeOnTag[]
+  eligibilityRules EligibilityRule[]
+  benefitRows      SchemeBenefit[]
+  documentRows     DocumentRequirement[]
+  engagements      SchemeEngagement[]
+  faqs             SchemeFaq[]
+  savedBy          SavedScheme[]
 
   @@map("schemes")
+}
+
+model Tag {
+  id      Int           @id @default(autoincrement())
+  slug    String        @unique @db.VarChar(64)
+  label   String        @db.VarChar(128)
+  schemes SchemeOnTag[]
+
+  @@map("tags")
+}
+
+model SchemeOnTag {
+  schemeId Int    @map("scheme_id")
+  tagId    Int    @map("tag_id")
+  scheme   Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  tag      Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([schemeId, tagId])
+  @@map("scheme_tags")
+}
+
+model EligibilityRule {
+  id        Int    @id @default(autoincrement())
+  schemeId  Int    @map("scheme_id")
+  criterion String @db.VarChar(64)
+  operator  String @db.VarChar(16)
+  value     String @db.Text
+  weight    Int    @default(10)
+  scheme    Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@index([schemeId])
+  @@map("eligibility_rules")
+}
+
+model SchemeBenefit {
+  id       Int     @id @default(autoincrement())
+  schemeId Int     @map("scheme_id")
+  title    String? @db.VarChar(256)
+  body     String  @db.Text
+  sort     Int     @default(0)
+  scheme   Scheme  @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@index([schemeId])
+  @@map("benefits")
+}
+
+model DocumentRequirement {
+  id       Int    @id @default(autoincrement())
+  schemeId Int    @map("scheme_id")
+  name     String @db.VarChar(512)
+  sort     Int    @default(0)
+  scheme   Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@index([schemeId])
+  @@map("documents_required")
+}
+
+model SchemeEngagement {
+  id        Int      @id @default(autoincrement())
+  schemeId  Int      @map("scheme_id")
+  type      String   @db.VarChar(16)
+  userId    Int?     @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  scheme    Scheme   @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([schemeId, createdAt])
+  @@index([type, createdAt])
+  @@map("scheme_engagements")
+}
+
+model User {
+  id         Int      @id @default(autoincrement())
+  externalId String   @unique @map("external_id") @db.VarChar(64)
+  email      String?  @unique @db.VarChar(255)
+  profile    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  engagements   SchemeEngagement[]
+  checks        UserEligibilityCheck[]
+  savedSchemes  SavedScheme[]
+  notifications Notification[]
+
+  @@map("users")
+}
+
+model UserEligibilityCheck {
+  id        Int      @id @default(autoincrement())
+  userId    Int?     @map("user_id")
+  payload   Json
+  results   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User?    @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@map("user_eligibility_checks")
+}
+
+model SavedScheme {
+  userId   Int      @map("user_id")
+  schemeId Int      @map("scheme_id")
+  savedAt  DateTime @default(now()) @map("saved_at")
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheme   Scheme   @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, schemeId])
+  @@map("saved_schemes")
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  type      String   @db.VarChar(64)
+  payload   Json
+  isRead    Boolean  @default(false) @map("is_read")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model AnalyticsEvent {
+  id        Int      @id @default(autoincrement())
+  eventType String   @map("event_type") @db.VarChar(64)
+  meta      Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([eventType, createdAt])
+  @@map("analytics_events")
+}
+
+model SchemeFaq {
+  id       Int    @id @default(autoincrement())
+  schemeId Int    @map("scheme_id")
+  question String @db.Text
+  answer   String @db.Text
+  sort     Int    @default(0)
+  scheme   Scheme @relation(fields: [schemeId], references: [id], onDelete: Cascade)
+
+  @@index([schemeId])
+  @@map("scheme_faqs")
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/db/client";
+import { recordAnalyticsEvent } from "@/services/analyticsService";
 import { HttpError, handleRouteError } from "@/utils/errors";
 import { corsHeaders, mergeHeaders } from "@/utils/cors";
 import { getClientIdentifier, rateLimit } from "@/utils/rateLimit";
@@ -37,11 +38,25 @@ export async function GET(request: Request, context: RouteContext) {
 
     const scheme = await prisma.scheme.findUnique({
       where: { slug: slugResult.data },
+      include: {
+        tags: { include: { tag: true } },
+        eligibilityRules: true,
+        benefitRows: { orderBy: { sort: "asc" } },
+        documentRows: { orderBy: { sort: "asc" } },
+        faqs: { orderBy: { sort: "asc" } },
+      },
     });
 
     if (!scheme) {
       throw new HttpError(404, "NOT_FOUND", "Scheme not found");
     }
+
+    void prisma.schemeEngagement
+      .create({
+        data: { schemeId: scheme.id, type: "view" },
+      })
+      .catch(() => {});
+    void recordAnalyticsEvent("scheme_view", { schemeId: scheme.id, slug: scheme.slug });
 
     return NextResponse.json(
       { ok: true, data: { scheme } },

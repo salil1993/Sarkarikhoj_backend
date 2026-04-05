@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { sanitizeOptionalText, sanitizeText } from "@/utils/sanitize";
 import type { NormalizedEligibilityInput } from "@/types/eligibility";
+import type { CheckEligibilityOptions } from "@/types/platform";
 
 /** Maps common frontend / alternate JSON keys to canonical names (does not log values). */
 function normalizeEligibilityPayload(body: unknown): unknown {
@@ -178,6 +179,64 @@ export function parseEligibilityBody(
       category,
     },
   };
+}
+
+const checkMetaSchema = z.object({
+  mode: z.enum(["strict", "scored"]).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+  userId: z.string().max(64).optional(),
+  user_id: z.string().max(64).optional(),
+  tags: z.array(z.string().max(40)).max(30).optional(),
+  tag: z.union([z.string(), z.array(z.string())]).optional(),
+});
+
+const META_KEYS = ["mode", "limit", "userId", "user_id", "tags", "tag"] as const;
+
+export function parseCheckEligibilityFull(
+  body: unknown,
+):
+  | { success: true; options: CheckEligibilityOptions }
+  | { success: false; error: z.ZodError } {
+  const normalized = normalizeEligibilityPayload(body);
+  if (normalized === null || typeof normalized !== "object" || Array.isArray(normalized)) {
+    return {
+      success: false,
+      error: new z.ZodError([
+        { code: "custom", path: [], message: "Request body must be a JSON object" },
+      ]),
+    };
+  }
+
+  const o = normalized as Record<string, unknown>;
+  const metaSlice: Record<string, unknown> = {};
+  for (const k of META_KEYS) {
+    if (k in o) metaSlice[k] = o[k];
+  }
+  const metaParsed = checkMetaSchema.safeParse(metaSlice);
+  if (!metaParsed.success) return { success: false, error: metaParsed.error };
+
+  const rest = { ...o };
+  for (const k of META_KEYS) delete rest[k];
+
+  const elig = parseEligibilityBody(rest);
+  if (!elig.success) return { success: false, error: elig.error };
+
+  const m = metaParsed.data;
+  const extraTags: string[] = [...(m.tags ?? [])];
+  if (m.tag) {
+    if (typeof m.tag === "string") extraTags.push(m.tag);
+    else extraTags.push(...m.tag);
+  }
+
+  const options: CheckEligibilityOptions = {
+    mode: m.mode ?? "scored",
+    limit: m.limit ?? 50,
+    userExternalId: m.userId ?? m.user_id,
+    tags: extraTags.map((t) => t.toLowerCase().trim()).filter(Boolean),
+    criteria: elig.data,
+  };
+
+  return { success: true, options };
 }
 
 const slugSchema = z
